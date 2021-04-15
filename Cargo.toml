@@ -1,0 +1,15 @@
+[package]
+name = "expression_format_impl"
+version = "1.0.0"
+authors = ["Sebastian Ortmann <ortmann.sebastian@gmail.com>"]
+edition = "2018"
+description = "macros implementation of crate expression_format."
+license = "MIT OR Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+regex = "1"
+
+[lib]
+proc-macro = true
