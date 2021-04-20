@@ -43,7 +43,7 @@ pub fn ex_eprintln(item: TokenStream) -> TokenStream {
 // =====================================================================
 
 fn ex_impl(func: &str, arg: &str) -> String {
-    let mod_regex = Regex::new(r#"^:#?\?"#).unwrap();
+    let mod_regex = Regex::new(r#"^:(?:[^\?\s\$\*]*[\?|\s])"#).unwrap();
     let mut ex_fmt = String::with_capacity(arg.len());
     let mut ex_args = String::with_capacity(arg.len());
     let mut search_index = 0;
@@ -57,7 +57,12 @@ fn ex_impl(func: &str, arg: &str) -> String {
 
         ex_args.push(',');
         if let Some(modifier) = mod_regex.find(expr) {
-            ex_fmt.push_str(modifier.as_str());
+            let fmt_spec = modifier.as_str();
+            if fmt_spec.ends_with('?') {
+                ex_fmt.push_str(fmt_spec);
+            } else {
+                ex_fmt.push_str(&fmt_spec[..(fmt_spec.len() - 1)]);
+            }
             ex_args.push_str(&expr[modifier.end()..]);
         } else {
             ex_args.push_str(expr);
@@ -428,6 +433,12 @@ mod tests {
             r#""lorem {}",/*/*inside comment*/still inside comment*/"ipsum""#,
         );
     }
+
+    #[test]
+    fn test_format_width() {
+        test_helper(r#""{:04 42}""#, r#""{:04}",42"#);
+    }
+
 
     fn test_helper(in_arg: &str, out_arg: &str) {
         let expected = format!("format!({})", out_arg);
