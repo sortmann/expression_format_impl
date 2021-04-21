@@ -1,6 +1,6 @@
 [package]
 name = "expression_format_impl"
-version = "1.1.0"
+version = "1.1.1"
 authors = ["Sebastian Ortmann <ortmann.sebastian@gmail.com>"]
 edition = "2018"
 description = "macros implementation for crate expression_format."

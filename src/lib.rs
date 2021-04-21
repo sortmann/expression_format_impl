@@ -43,30 +43,16 @@ pub fn ex_eprintln(item: TokenStream) -> TokenStream {
 // =====================================================================
 
 fn ex_impl(func: &str, arg: &str) -> String {
-    let mod_regex = Regex::new(r#"^:(?:[^\?\s\$\*]*[\?|\s])"#).unwrap();
+    let mod_regex = Regex::new(r#"^:(?:(?:.?[<\^>])?[\+\-]?#?0?\d*(?:\.\d+)?(?:[oxXpbeE]?\??))"#).unwrap();
     let mut ex_fmt = String::with_capacity(arg.len());
     let mut ex_args = String::with_capacity(arg.len());
     let mut search_index = 0;
 
-    while let Some(range) = range_in_brackets(&arg, search_index) {
-        ex_fmt.push_str(&arg[search_index..range.start]);
-
-        search_index = range.end;
-
-        let expr = &arg[range];
-
+    while let Some(expr_range) = range_in_brackets(&arg, search_index, &mod_regex) {
+        ex_fmt.push_str(&arg[search_index..expr_range.start]);
+        search_index = expr_range.end;
         ex_args.push(',');
-        if let Some(modifier) = mod_regex.find(expr) {
-            let fmt_spec = modifier.as_str();
-            if fmt_spec.ends_with('?') {
-                ex_fmt.push_str(fmt_spec);
-            } else {
-                ex_fmt.push_str(&fmt_spec[..(fmt_spec.len() - 1)]);
-            }
-            ex_args.push_str(&expr[modifier.end()..]);
-        } else {
-            ex_args.push_str(expr);
-        }
+        ex_args.push_str(&arg[expr_range]);
     }
 
     ex_fmt.push_str(&arg[search_index..]);
@@ -76,20 +62,34 @@ fn ex_impl(func: &str, arg: &str) -> String {
 
 type Iter<'a> = CharIndices<'a>;
 
-fn range_in_brackets(arg: &str, start_index: usize) -> Option<Range<usize>> {
-    if let Some(range) = range_of_expression(&mut arg[start_index..].char_indices()) {
-        return Some((range.start + start_index)..(range.end + start_index));
+
+fn range_in_brackets(arg: &str, start_index: usize, specs: &Regex) -> Option<Range<usize>> {
+    let mut start = match find_expr_start(&mut arg[start_index..].char_indices()) {
+        Some(i) => start_index + i,
+        None => return None,
+    };
+
+    if let Some(modifier) = specs.find(&arg[start..]) {
+        start += modifier.end(); 
+    }
+
+    if let Some(end) = find_expr_end(&mut arg[start..].char_indices()) {
+        return Some(start..(start + end));
     }
 
     None
 }
 
-fn range_of_expression(iter: &mut Iter) -> Option<Range<usize>> {
-    while let Some((i, c)) = iter.next() {
-        if c == '{' {
-            if let Some(end) = find_expr_end(iter) {
-                return Some((i + 1)..end);
-            }
+fn find_expr_start(iter: &mut Iter) -> Option<usize> {
+    let mut prev_c = 0 as char;
+    for (i, c) in iter {
+        if prev_c == '{' {
+            if c != '{' {
+                return Some(i)
+            } 
+            prev_c = 0 as char;
+        } else {
+            prev_c = c;
         }
     }
 
@@ -99,17 +99,13 @@ fn range_of_expression(iter: &mut Iter) -> Option<Range<usize>> {
 // counts opening and closing brackets and recognizes all the constructs
 // where they should be ignored
 fn find_expr_end(iter: &mut Iter) -> Option<usize> {
-    let mut prev_c = '{';
+    let mut prev_c = 0 as char;
     let mut depth = 1;
     while let Some((i, c)) = iter.next() {
         prev_c = match c {
             '{' => {
-                if depth == 1 && prev_c == '{' {
-                    return None;
-                } else {
-                    depth += 1;
-                    0 as char
-                }
+                depth += 1;
+                0 as char
             }
             '}' => {
                 depth -= 1;
@@ -436,9 +432,13 @@ mod tests {
 
     #[test]
     fn test_format_width() {
-        test_helper(r#""{:04 42}""#, r#""{:04}",42"#);
+        test_helper(r#""{:04 42}""#, r#""{:04}", 42"#);
     }
 
+    #[test]
+    fn test_format_alignment_with_char() {
+        test_helper(r#""{:'>10 "test"}""#, r#""{:'>10}", "test""#);
+    }
 
     fn test_helper(in_arg: &str, out_arg: &str) {
         let expected = format!("format!({})", out_arg);
